@@ -2,6 +2,7 @@
 
 THIS_BASENAME=$(basename "$0")
 TMUX_SESSION_NAME="tmux-cssh"
+TMUX_WINDOW_NUMBER="0"
 HOSTS=""
 USER=""
 IDENTITY=""
@@ -19,7 +20,7 @@ CONFIG_SETTING_NAME=""
 
 # Outputs script syntax and help
 syntax() {
-	echo "Syntax: ${THIS_BASENAME} [-h|-u [user]|-c|--certificate|-i|--identity [path to certificate-/identity-file]|-sc [ssh-server-connect-string]|-sa [additional ssh arguments]|-ss,-csc [ssh-command]|-ts [session-name]|-ns|-tl [tmux-layout]|-set|-q|-f [filename]|-cs [name of config-parameters to use]|[-dc,-ds][-cf config-file]]"
+	echo "Syntax: ${THIS_BASENAME} [-h|-u [user]|-c|--certificate|-i|--identity [path to certificate-/identity-file]|-sc [ssh-server-connect-string]|-sa [additional ssh arguments]|-ss,-csc [ssh-command]|-ts [session-name]|-tw [window-number]|-ns|-tl [tmux-layout]|-set|-q|-f [filename]|-cs [name of config-parameters to use]|[-dc,-ds][-cf config-file]]"
 	echo
 
 	echo "-h | --help                                This help."
@@ -43,6 +44,9 @@ syntax() {
 	echo
 
 	echo "-ts | --tmux-session-name                  Alternative tmux-session-name, default: ${THIS_BASENAME}"
+	echo
+
+	echo "-tw | --tmux-window-number                 Alternative tmux-window-number, default: ${TMUX_WINDOW_NUMBER}"
 	echo
 
 	echo "-tl | --tmuxlayout                         Use different layouts (tiled, even-vertical... ) see in man tmux for more information"
@@ -104,6 +108,7 @@ analyseParameters() {
 			-sa|--ssh_args) SSH_ARGS="${SSH_ARGS} $2"; shift;;
 			-ss|-csc|--ssh_command|--custom-ssh-command) SSH_COMMAND="$2"; shift;;
 			-ts|--tmux-session-name) TMUX_SESSION_NAME="$2"; shift;;
+			-tw|--tmux-window-number) TMUX_WINDOW_NUMBER="$2"; shift;;
 			-tl|--tmuxlayout)
 				case "$2" in
 					h|h) TMUX_LAYOUT="even-horizontal";;
@@ -224,12 +229,13 @@ if [ "$FILENAME" != "" ]; then
 	done
 fi
 
-# Check if tmux-session is available
-if tmux ls 2> /dev/null | grep -q "${TMUX_SESSION_NAME}"; then
+# Check if tmux-session:window is available
+if tmux list-windows -a 2> /dev/null | grep -q "^${TMUX_SESSION_NAME}:${TMUX_WINDOW_NUMBER}: "; then
 	# Setup synchronizing panes
-	synchronizePanes ${SYNCHRONIZE_PANES} ${TMUX_SESSION_NAME}
+	synchronizePanes ${SYNCHRONIZE_PANES} "${TMUX_SESSION_NAME}:${TMUX_WINDOW_NUMBER}"
 
-	# Attach to available tmux-session
+	# Attach to available tmux-session:window
+	tmux select-window -t "${TMUX_SESSION_NAME}:${TMUX_WINDOW_NUMBER}"
 	tmux attach -t "${TMUX_SESSION_NAME}"
 	exit
 fi
@@ -292,26 +298,36 @@ for host in ${HOSTS}; do
 
 	# First Call, inits the tmux-session
 	if [ "${initTmuxCall}" = "true" ]; then
-		tmux new-session -d -s "${TMUX_SESSION_NAME}" "${connectString}"
+        if tmux ls 2> /dev/null | grep -q "^${TMUX_SESSION_NAME}: "; then
+			tmux new-window -t "${TMUX_SESSION_NAME}:${TMUX_WINDOW_NUMBER}" "${connectString}"
+		else
+			if [ "${TMUX_WINDOW_NUMBER}" = '0' ]; then
+				tmux new-session -d -s "${TMUX_SESSION_NAME}" "${connectString}"
+			else
+				tmux new-session -d -s "${TMUX_SESSION_NAME}"
+				tmux new-window -t "${TMUX_SESSION_NAME}:${TMUX_WINDOW_NUMBER}" "${connectString}"
+			fi
+		fi
 
         # If our initial ssh connection has failed, do not mark initTmuxCall as false since tmux will have aborted.
         # We'll need to try to start a new tmux session for the next host.
-        if tmux ls 2> /dev/null | grep -q "${TMUX_SESSION_NAME}"; then
+        if tmux list-windows -a 2> /dev/null | grep -q "^${TMUX_SESSION_NAME}:${TMUX_WINDOW_NUMBER}: "; then
               initTmuxCall="false"
         fi
 	else
-        tmux split-window -t "${TMUX_SESSION_NAME}" "${connectString}" && tmux select-layout -t "${TMUX_SESSION_NAME}" "${TMUX_LAYOUT}"
+        tmux split-window -t "${TMUX_SESSION_NAME}:${TMUX_WINDOW_NUMBER}" "${connectString}" && tmux select-layout -t "${TMUX_SESSION_NAME}:${TMUX_WINDOW_NUMBER}" "${TMUX_LAYOUT}"
 	fi
 done
 
 # If no session was able to start, say so and just exit.
-if ! tmux ls 2> /dev/null | grep -q "${TMUX_SESSION_NAME}"; then
+if ! tmux list-windows -a 2> /dev/null | grep -q "^${TMUX_SESSION_NAME}:${TMUX_WINDOW_NUMBER}: "; then
   echo "All connections have failed."
   exit 1
 fi
 
 # Setup synchronizing panes
-synchronizePanes ${SYNCHRONIZE_PANES} ${TMUX_SESSION_NAME}
+synchronizePanes ${SYNCHRONIZE_PANES} "${TMUX_SESSION_NAME}:${TMUX_WINDOW_NUMBER}"
 
 # Attach to tmux session
+tmux select-window -t "${TMUX_SESSION_NAME}:${TMUX_WINDOW_NUMBER}"
 tmux attach-session -t "${TMUX_SESSION_NAME}"
