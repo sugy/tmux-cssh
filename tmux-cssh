@@ -235,7 +235,7 @@ if [ "$FILENAME" != "" ]; then
 fi
 
 # Check if tmux-session:window is available
-if tmux list-windows -a 2> /dev/null | grep -q "^${TMUX_SESSION_NAME}:${TMUX_WINDOW_NUMBER}: "; then
+if tmux list-windows -a 2> /dev/null | grep -q "^${TMUX_SESSION_NAME}: *${TMUX_WINDOW_NUMBER}: "; then
 	# Setup synchronizing panes
 	synchronizePanes ${SYNCHRONIZE_PANES} "${TMUX_SESSION_NAME}:${TMUX_WINDOW_NUMBER}"
 
@@ -318,7 +318,7 @@ for host in ${HOSTS}; do
 
         # If our initial ssh connection has failed, do not mark initTmuxCall as false since tmux will have aborted.
         # We'll need to try to start a new tmux session for the next host.
-        if tmux list-windows -a 2> /dev/null | grep -q "^${TMUX_SESSION_NAME}:${TMUX_WINDOW_NUMBER}: "; then
+        if tmux list-windows -a 2> /dev/null | grep -q "^${TMUX_SESSION_NAME}: *${TMUX_WINDOW_NUMBER}: "; then
               initTmuxCall="false"
 			  count_pane=$((count_pane+1))
         fi
@@ -341,7 +341,7 @@ if [ "${initTmuxCall}" = "true" ]; then
 fi
 
 # If no session was able to start, say so and just exit.
-if ! tmux list-windows -a 2> /dev/null | grep -q "^${TMUX_SESSION_NAME}:${inital_window_number}: "; then
+if ! tmux list-windows -a 2> /dev/null | grep -q "^${TMUX_SESSION_NAME}: *${inital_window_number}: "; then
   echo "All connections have failed."
   exit 1
 fi
